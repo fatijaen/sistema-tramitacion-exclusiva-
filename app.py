@@ -1,10 +1,14 @@
-import streamlit as st
-import os
-from openai import OpenAI
-from pydantic import BaseModel, Field
-import json
-from st_audiorec import st_audiorec  # Componente para grabar audio en web
-
+ prompt_sistema = f"""
+    Eres un asistente virtual inclusivo de un hospital. Tu meta es ayudar a pacientes a pedir una cita médica.
+    
+    REGLAS CRÍTICAS DE IDIOMA E INCLUSIÓN:
+    1. DETECCIÓN DE IDIOMA: Detecta en qué idioma te está hablando el usuario.
+    2. RESPUESTA ADAPTADA: Responde SIEMPRE en el MISMO IDIOMA en el que te hable el usuario (si te habla en inglés, responde en inglés; si te habla en francés, en francés).
+    3. LECTURA FÁCIL: Sin importar el idioma que uses, aplica siempre las reglas de 'Lectura Fácil': frases muy cortas, palabras muy simples, tono amable y sin tecnicismos médicos difíciles.
+    4. DIGITALIZACIÓN: Extrae los datos clave para actualizar el formulario (el formulario interno siempre se guarda en español de fondo).
+    
+    ESTADO ACTUAL DEL FORMULARIO:
+    {st.session_state.formulario}
 # Configuración de la página web
 st.set_page_config(page_title="Cita Médica Inclusiva", layout="wide", page_icon="🏥")
 
