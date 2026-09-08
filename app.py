@@ -1,19 +1,15 @@
-    Eres un asistente virtual inclusivo de un hospital. Tu meta es ayudar a pacientes a pedir una cita médica.
-    
-    REGLAS CRÍTICAS DE IDIOMA E INCLUSIÓN:
-    1. DETECCIÓN DE IDIOMA: Detecta en qué idioma te está hablando el usuario.
-    2. RESPUESTA ADAPTADA: Responde SIEMPRE en el MISMO IDIOMA en el que te hable el usuario (si te habla en inglés, responde en inglés; si te habla en francés, en francés).
-    3. LECTURA FÁCIL: Sin importar el idioma que uses, aplica siempre las reglas de 'Lectura Fácil': frases muy cortas, palabras muy simples, tono amable y sin tecnicismos médicos difíciles.
-    4. DIGITALIZACIÓN: Extrae los datos clave para actualizar el formulario (el formulario interno siempre se guarda en español de fondo).
-    
-    ESTADO ACTUAL DEL FORMULARIO:
-    {st.session_state.formulario}
+   import streamlit as st
+import os
+from openai import OpenAI
+from pydantic import BaseModel, Field
+import json
+from streamlit_audiorec import st_audiorec
+
 # Configuración de la página web
 st.set_page_config(page_title="Cita Médica Inclusiva", layout="wide", page_icon="🏥")
 
-# Inicializar la API de OpenAI
-# Recuerda configurar tu clave: export OPENAI_API_KEY="tu-clave" o ponerla aquí directamente
-API_KEY = os.getenv("OPENAI_API_KEY", "TU_OPENAI_API_KEY_AQUI")
+# Inicializar la API de OpenAI desde los Secrets de Streamlit
+API_KEY = st.secrets.get("OPENAI_API_KEY", os.getenv("OPENAI_API_KEY", "TU_OPENAI_API_KEY_AQUI"))
 client = OpenAI(api_key=API_KEY)
 
 # 1. ESTRUCTURA DEL FORMULARIO DE CITA
@@ -40,14 +36,15 @@ if "audio_generado" not in st.session_state:
 
 # FUNCIONES RELEVANTES DE IA
 def procesar_con_ia(texto_usuario):
-    """Envía la respuesta al modelo para actualizar el formulario y obtener respuesta en Lectura Fácil"""
+    """Envía la respuesta al modelo para actualizar el formulario y obtener respuesta multilingüe"""
     prompt_sistema = f"""
-    Eres un asistente virtual inclusivo de un hospital. Tu meta es ayudar a pacientes (mayores, extranjeros o con dificultades) a pedir cita.
+    Eres un asistente virtual inclusivo de un hospital. Tu meta es ayudar a pacientes a pedir una cita médica.
     
-    REGLAS:
-    1. Responde SIEMPRE en español con LECTURA FÁCIL (frases cortas, claras, sin tecnicismos como 'cefalera' o 'patología').
-    2. Extrae la información para actualizar el formulario adjunto.
-    3. Si el usuario habla en otro idioma, entiéndelo, pero respóndele en un español muy sencillo.
+    REGLAS CRÍTICAS DE IDIOMA E INCLUSIÓN:
+    1. DETECCIÓN DE IDIOMA: Detecta en qué idioma te está hablando el usuario (inglés, árabe, francés, etc.).
+    2. RESPUESTA ADAPTADA: Responde SIEMPRE en el MISMO IDIOMA en el que te hable el usuario. Si te habla en inglés, responde en inglés; si te habla en árabe, en árabe.
+    3. LECTURA FÁCIL: Sin importar el idioma que uses, aplica siempre las reglas de 'Lectura Fácil': frases muy cortas, palabras muy simples, tono amable y sin tecnicismos médicos difíciles.
+    4. DIGITALIZACIÓN: Extrae los datos clave para actualizar el formulario (el formulario interno de fondo se guarda de manera normalizada).
     
     ESTADO ACTUAL DEL FORMULARIO:
     {st.session_state.formulario}
@@ -73,10 +70,9 @@ def texto_a_voz(texto):
     """Transforma el texto de la IA en un audio hablado de alta calidad (TTS)"""
     response = client.audio.speech.create(
         model="tts-1",
-        voice="shimmer",  # Voz clara y profesional
+        voice="shimmer",
         input=texto
     )
-    # Guardamos temporalmente el archivo de audio
     audio_path = "respuesta.mp3"
     response.stream_to_file(audio_path)
     return audio_path
@@ -85,85 +81,72 @@ def texto_a_voz(texto):
 st.title("🏥 Sistema de Tramitación Electrónica Inclusiva por Diseño")
 st.subheader("Prototipo Inteligente: Petición de Cita Médica Accesible")
 
-col1, col2 = st.columns([1, 1], gap="large")
+col1, col2 = st.columns(2, gap="large")
 
-# --- COLUMNA 1: EL FORMULARIO DE TRAMITACIÓN (SE RELLENA SOLO) ---
+# --- COLUMNA 1: EL FORMULARIO DE TRAMITACIÓN ---
 with col1:
     st.markdown("### 📋 Tu Formulario de Cita")
     st.caption("Esta sección muestra cómo el sistema digitaliza los datos de fondo sin que tengas que teclear.")
     
-    # Campos visuales que se actualizan dinámicamente
-    motivo = st.text_input("¿Qué le pasa al paciente? (Motivo)", value=st.session_state.formulario["motivo_consulta"], disabled=True)
-    especialidad = st.selectbox("Especialidad asignada", ["", "Medicina General", "Pediatría", "Enfermería"], 
-                                index=["", "Medicina General", "Pediatría", "Enfermería"].index(st.session_state.formulario["especialidad"]), disabled=True)
-    horario = st.text_input("Preferencia de horario", value=st.session_state.formulario["preferencia_horario"], disabled=True)
+    st.text_input("¿Qué le pasa al paciente? (Motivo)", value=st.session_state.formulario["motivo_consulta"], disabled=True)
+    
+    lista_especialidades = ["", "Medicina General", "Pediatría", "Enfermería"]
+    idx_esp = lista_especialidades.index(st.session_state.formulario["especialidad"]) if st.session_state.formulario["especialidad"] in lista_especialidades else 0
+    st.selectbox("Especialidad asignada", lista_especialidades, index=idx_esp, disabled=True)
+    
+    st.text_input("Preferencia de horario", value=st.session_state.formulario["preferencia_horario"], disabled=True)
     
     if st.session_state.formulario["datos_completos"]:
         st.success("✅ ¡Todo listo! Tu cita ha sido registrada con éxito.")
     else:
         st.info("⏳ Esperando completar los datos a través del asistente...")
 
-# --- COLUMNA 2: EL ASISTENTE CON IA INCLUSIVA (CHAT Y VOZ) ---
+# --- COLUMNA 2: EL ASISTENTE CON IA INCLUSIVA ---
 with col2:
     st.markdown("### 💬 Asistente de Voz y Accesibilidad")
     
-    # Mostrar el historial del chat de forma limpia
     for mensaje in st.session_state.historial_chat:
         with st.chat_message(mensaje["role"]):
             st.write(mensaje["content"])
             
-    # Reproductor de audio automático para la última respuesta de la IA
     if st.session_state.audio_generado and os.path.exists(st.session_state.audio_generado):
         st.audio(st.session_state.audio_generado, format="audio/mp3", autoplay=True)
     
     st.markdown("---")
     st.markdown("**🎙️ ¿Prefieres hablar? Graba tu respuesta aquí:**")
     
-    # Grabadora de voz en la interfaz web
     audio_bytes = st_audiorec()
-    
-    # Entrada de texto tradicional por si el usuario prefiere escribir
     entrada_texto = st.chat_input("Escribe aquí tu respuesta...")
     
     texto_a_procesar = ""
     
-    # Escenario A: El usuario ha grabado un audio
     if audio_bytes is not None:
         with open("audio_usuario.wav", "wb") as f:
             f.write(audio_bytes)
         
-        # Procesar audio con Whisper (Speech-to-Text de OpenAI)
         with open("audio_usuario.wav", "rb") as audio_file:
             transcripcion = client.audio.transcriptions.create(
                 model="whisper-1", 
                 file=audio_file
             )
         texto_a_procesar = transcripcion.text
-        # Limpiamos el audio grabado para evitar bucles de ejecución
         audio_bytes = None 
         
-    # Escenario B: El usuario ha escrito texto
     elif entrada_texto:
         texto_a_procesar = entrada_texto
 
-    # SI HAY NUEVA ENTRADA (Texto o Voz), PROCESAMOS:
     if texto_a_procesar:
-        # 1. Añadir lo que dijo el usuario a la pantalla
         st.session_state.historial_chat.append({"role": "user", "content": texto_a_procesar})
         
-        # 2. La IA lo analiza y actualiza el formulario
-        with st.spinner("Pensando de forma inclusiva..."):
+        with st.spinner("Procesando de forma inclusiva..."):
             resultado_ia = procesar_con_ia(texto_a_procesar)
         
-        # 3. Guardar el nuevo estado del formulario y la respuesta
         st.session_state.formulario = resultado_ia["formulario_actualizado"]
         respuesta_texto = resultado_ia["respuesta_lectura_facil"]
         
         st.session_state.historial_chat.append({"role": "assistant", "content": respuesta_texto})
         
-        # 4. Generar la voz de la IA (Text-to-Speech)
         archivo_voz = texto_a_voz(respuesta_texto)
         st.session_state.audio_generado = archivo_voz
         
-        # Recargar la página para que se vean los cambios en el formulario y suene el audio
         st.rerun()
