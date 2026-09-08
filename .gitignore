@@ -1,0 +1,6 @@
+# Evitar subir las claves secretas o entornos virtuales
+.env
+__pycache__/
+*.mp3
+*.wav
+.streamlit/secrets.toml
